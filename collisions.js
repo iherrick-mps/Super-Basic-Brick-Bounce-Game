@@ -18,8 +18,7 @@ function boxesTouch(a, b) {
 
 
 // The ball bounces off the left, right, and top walls.
-// (The bottom is not a wall: falling off the bottom resets the ball.)
-function bounceOffWalls() {
+function bounceOffWalls(ball) {
   if (ball.x < 0) {
     ball.x = 0;
     ball.vx = -ball.vx;
@@ -34,21 +33,31 @@ function bounceOffWalls() {
   }
 }
 
+function bounceOffBottom(ball) {
+  if (ball.y + ball.height < HEIGHT || ball.vy <= 0) {
+    return;
+  }
 
-// The ball bounces off the top of the paddle.
-// ball.vy > 0 means "the ball is moving down", so it only bounces
-// when it is falling onto the paddle.
-function bounceOffPaddle() {
+  ball.state = "held";
+  ball.vx = 0;
+  ball.vy = 0;
+}
+
+
+// A descending ball is caught and held for the next volley.
+function bounceOffPaddle(ball) {
   if (boxesTouch(ball, paddle) && ball.vy > 0) {
-    ball.y = paddle.y - ball.height;  // sit on top of the paddle
-    ball.vy = -ball.vy;
+    ball.state = "held";
+    ball.vx = 0;
+    ball.vy = 0;
   }
 }
 
 
-// The ball bounces off the bricks. Nothing happens to the brick yet.
-function bounceOffBricks() {
-  for (const brick of bricks) {
+// The ball bounces off blocks and damages the one it hits.
+function bounceOffBricks(ball) {
+  for (let index = 0; index < bricks.length; index++) {
+    const brick = bricks[index];
     if (!boxesTouch(ball, brick)) {
       continue;  // not touching this brick, check the next one
     }
@@ -72,6 +81,27 @@ function bounceOffBricks() {
         ball.y = brick.y - ball.height;    // above the brick
       } else {
         ball.y = brick.y + brick.height;   // below the brick
+      }
+    }
+
+    spawnParticles(brick.x + brick.width / 2, brick.y + brick.height / 2, "#fff45c", 5);
+    brick.hitsRemaining -= 1;
+    if (brick.hitsRemaining <= 0) {
+      spawnParticles(brick.x + brick.width / 2, brick.y + brick.height / 2, "#ff4cae", 22);
+      if (brick.effect === "ROW") {
+        const rowBricks = bricks.filter((candidate) => candidate.y === brick.y);
+        for (const rowBrick of rowBricks) {
+          if (rowBrick.brainrotRarity) spawnBrainrotDrop(rowBrick.brainrotRarity, rowBrick);
+        }
+        GameState.Score += rowBricks.length * 10;
+        bricks = bricks.filter((candidate) => candidate.y !== brick.y);
+      } else {
+        if (brick.brainrotRarity) spawnBrainrotDrop(brick.brainrotRarity, brick);
+        GameState.Score += 10;
+        bricks.splice(index, 1);
+      }
+      if (brick.effect === "BALL") {
+        scheduleExtraBall(ball.x, ball.y, -ball.vx, ball.vy);
       }
     }
 

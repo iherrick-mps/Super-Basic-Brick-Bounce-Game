@@ -2,40 +2,88 @@
 // bricks.js: where the bricks are, and how they are drawn
 // ============================================================
 
-const BRICK_COLUMNS = 8;
-const BRICK_ROWS = 4;
-const BRICK_WIDTH = 60;
-const BRICK_HEIGHT = 20;
-const BRICK_GAP = 6;     // empty space between bricks
-const BRICKS_TOP = 50;   // how far down the first row starts
+const BRICK_COLUMNS = 12;
+const BRICK_ROWS = 14;
+const BRICK_WIDTH = WIDTH / BRICK_COLUMNS;
+const BRICK_HEIGHT = BRICK_WIDTH;
+const BOARD_TOP = 48;
+const BOARD_BOTTOM = BOARD_TOP + BRICK_ROWS * BRICK_HEIGHT;
 
-// Builds the list of bricks. Each brick is an object with an
-// x, y, width, and height.
-function makeBricks() {
-  const list = [];
+const TETROMINO_SHAPES = [
+  [[0, 0], [1, 0], [2, 0], [3, 0]],
+  [[0, 0], [1, 0], [0, 1], [1, 1]],
+  [[0, 0], [1, 0], [2, 0], [1, 1]],
+  [[0, 0], [1, 0], [1, 1], [2, 1]],
+  [[1, 0], [2, 0], [0, 1], [1, 1]],
+  [[0, 0], [0, 1], [1, 1], [2, 1]],
+  [[2, 0], [0, 1], [1, 1], [2, 1]]
+];
 
-  // Center the whole block of bricks on the screen.
-  const totalWidth = BRICK_COLUMNS * BRICK_WIDTH + (BRICK_COLUMNS - 1) * BRICK_GAP;
-  const left = (WIDTH - totalWidth) / 2;
-
-  for (let row = 0; row < BRICK_ROWS; row++) {
-    for (let col = 0; col < BRICK_COLUMNS; col++) {
-      list.push({
-        x: left + col * (BRICK_WIDTH + BRICK_GAP),
-        y: BRICKS_TOP + row * (BRICK_HEIGHT + BRICK_GAP),
-        width: BRICK_WIDTH,
-        height: BRICK_HEIGHT
-      });
-    }
-  }
-
-  return list;
+function createBrick(x, y, hitsRequired = 1, effect = null) {
+  const dropChance = Math.min(0.98, GAME_CONFIG.brainrots.dropChance * brainrotDropMultiplier);
+  const brainrotRarity = Math.random() < dropChance ? rollBrainrotRarity().name : null;
+  return {
+    x,
+    y,
+    width: BRICK_WIDTH,
+    height: BRICK_HEIGHT,
+    hitsRequired,
+    hitsRemaining: hitsRequired,
+    effect,
+    brainrotRarity
+  };
 }
 
-// Draws every brick in the list.
 function drawBricks() {
-  ctx.fillStyle = "white";
   for (const brick of bricks) {
-    ctx.fillRect(brick.x, brick.y, brick.width, brick.height);
+    const hue = (brick.x * 0.34 + brick.y * 0.18 + performance.now() / 32) % 360;
+    const gradient = ctx.createLinearGradient(brick.x, brick.y, brick.x + brick.width, brick.y + brick.height);
+    gradient.addColorStop(0, `hsl(${hue}, 100%, 62%)`);
+    gradient.addColorStop(1, `hsl(${(hue + 62) % 360}, 100%, 48%)`);
+    ctx.shadowColor = `hsl(${hue}, 100%, 58%)`;
+    ctx.shadowBlur = 13;
+    ctx.fillStyle = gradient;
+    ctx.fillRect(brick.x + 2, brick.y + 2, brick.width - 4, brick.height - 4);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "rgba(255,255,255,.8)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(brick.x + 2, brick.y + 2, brick.width - 4, brick.height - 4);
+    if (brick.brainrotRarity) {
+      const rarity = brainrotRarities.find((item) => item.name === brick.brainrotRarity);
+      ctx.fillStyle = rarity.color;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.font = "900 9px Impact, sans-serif";
+      ctx.fillText(brick.brainrotRarity.toUpperCase(), brick.x + brick.width / 2, brick.y + 5, brick.width - 6);
+    }
+    ctx.fillStyle = "#10121a";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "900 12px Impact, sans-serif";
+    const label = brick.effect || (brick.hitsRequired > 1 ? `x${brick.hitsRemaining}` : "BLOCK");
+    ctx.fillText(label, brick.x + brick.width / 2, brick.y + brick.height / 2, brick.width - 4);
+  }
+  drawFallingBrainrots();
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+}
+
+function drawFallingBrainrots() {
+  for (const drop of fallingBrainrots) {
+    const image = getBrainrotImage(drop.brainrot.image);
+    ctx.save();
+    ctx.shadowColor = drop.brainrot.color;
+    ctx.shadowBlur = 12;
+    if (image.complete && image.naturalWidth > 0) {
+      ctx.drawImage(image, drop.x, drop.y, drop.width, drop.height);
+    } else {
+      ctx.fillStyle = drop.brainrot.color;
+      ctx.fillRect(drop.x, drop.y, drop.width, drop.height);
+    }
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = drop.brainrot.color;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(drop.x, drop.y, drop.width, drop.height);
+    ctx.restore();
   }
 }
