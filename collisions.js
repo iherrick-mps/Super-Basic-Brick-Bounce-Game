@@ -1,80 +1,128 @@
-// ============================================================
-// collisions.js: what happens when the ball touches something
-//
-// To "bounce", we flip the ball's speed:
-//   hit something sideways -> vx = -vx
-//   hit something above or below -> vy = -vy
-// ============================================================
+function handleBrickImpact(brick, brickIndex, brickTransform) {
+  const hasMultiHit = Number.isFinite(brick?.hits) && Number.isFinite(brick?.maxHits) && brick.maxHits > 1;
 
-// Returns true if two rectangles (like the ball and a brick) overlap.
+  if (hasMultiHit) {
+    brick.hits -= 1;
+
+    if (brick.hits <= 0) {
+      maybeSpawnPowerUp(
+        brickTransform.x,
+        brickTransform.y,
+        brickTransform.width,
+        brickTransform.height
+      );
+
+      bricks.splice(brickIndex, 1);
+      score += 10 * level;
+      return true;
+    }
+
+    return false;
+  }
+
+  maybeSpawnPowerUp(
+    brickTransform.x,
+    brickTransform.y,
+    brickTransform.width,
+    brickTransform.height
+  );
+
+  bricks.splice(brickIndex, 1);
+  score += 10 * level;
+  return true;
+}
+
 function boxesTouch(a, b) {
+  const aBox = a.transform || a;
+  const bBox = b.transform || b;
+
   return (
-    a.x < b.x + b.width &&
-    a.x + a.width > b.x &&
-    a.y < b.y + b.height &&
-    a.y + a.height > b.y
+    aBox.x < bBox.x + bBox.width &&
+    aBox.x + aBox.width > bBox.x &&
+    aBox.y < bBox.y + bBox.height &&
+    aBox.y + aBox.height > bBox.y
   );
 }
 
-
-// The ball bounces off the left, right, and top walls.
-// (The bottom is not a wall: falling off the bottom resets the ball.)
 function bounceOffWalls() {
-  if (ball.x < 0) {
-    ball.x = 0;
-    ball.vx = -ball.vx;
+  const ballBox = ball.transform;
+
+  if (ballBox.x <= 0) {
+    ballBox.x = 0;
+    ballBox.vx = Math.abs(ballBox.vx || 1);
   }
-  if (ball.x + ball.width > WIDTH) {
-    ball.x = WIDTH - ball.width;
-    ball.vx = -ball.vx;
+
+  if (ballBox.x + ballBox.width >= WIDTH) {
+    ballBox.x = WIDTH - ballBox.width;
+    ballBox.vx = -Math.abs(ballBox.vx || 1);
   }
-  if (ball.y < 0) {
-    ball.y = 0;
-    ball.vy = -ball.vy;
+
+  if (ballBox.y <= 0) {
+    ballBox.y = 0;
+    ballBox.vy = Math.abs(ballBox.vy || 1);
   }
 }
 
-
-// The ball bounces off the top of the paddle.
-// ball.vy > 0 means "the ball is moving down", so it only bounces
-// when it is falling onto the paddle.
 function bounceOffPaddle() {
-  if (boxesTouch(ball, paddle) && ball.vy > 0) {
-    ball.y = paddle.y - ball.height;  // sit on top of the paddle
-    ball.vy = -ball.vy;
+  const paddleBox = paddle.transform;
+  const ballBox = ball.transform;
+
+  if (
+    ballBox.y + ballBox.height >= paddleBox.y &&
+    ballBox.y <= paddleBox.y + paddleBox.height &&
+    ballBox.x + ballBox.width >= paddleBox.x &&
+    ballBox.x <= paddleBox.x + paddleBox.width &&
+    ballBox.vy > 0
+  ) {
+    const hitPoint = (ballBox.x + ballBox.width / 2) - (paddleBox.x + paddleBox.width / 2);
+    const normalized = Math.max(-1, Math.min(1, hitPoint / (paddleBox.width / 2)));
+    const speed = Math.max(Math.hypot(ballBox.vx, ballBox.vy), BALL_SPEED_START * 1.08);
+
+    ballBox.vx = normalized * speed;
+    const vyAbs = Math.sqrt(Math.max(0.1, speed * speed - ballBox.vx * ballBox.vx));
+    ballBox.vy = -vyAbs;
+    ballBox.y = paddleBox.y - ballBox.height;
   }
 }
 
-
-// The ball bounces off the bricks. Nothing happens to the brick yet.
 function bounceOffBricks() {
-  for (const brick of bricks) {
+  // iterate backwards to avoid index issues when splicing
+  for (let i = bricks.length - 1; i >= 0; i--) {
+    const brick = bricks[i];
+    const brickTransform = brick.transform || brick;
+
     if (!boxesTouch(ball, brick)) {
-      continue;  // not touching this brick, check the next one
+      continue;
     }
 
-    // How far has the ball pushed into the brick on each side?
-    const overlapX = Math.min(ball.x + ball.width, brick.x + brick.width) - Math.max(ball.x, brick.x);
-    const overlapY = Math.min(ball.y + ball.height, brick.y + brick.height) - Math.max(ball.y, brick.y);
+    const overlapX =
+      Math.min(ball.transform.x + ball.transform.width, brickTransform.x + brickTransform.width) -
+      Math.max(ball.transform.x, brickTransform.x);
+    const overlapY =
+      Math.min(ball.transform.y + ball.transform.height, brickTransform.y + brickTransform.height) -
+      Math.max(ball.transform.y, brickTransform.y);
 
     if (overlapX < overlapY) {
-      // The ball hit the brick's left or right side.
-      ball.vx = -ball.vx;
-      if (ball.x < brick.x) {
-        ball.x = brick.x - ball.width;     // left of the brick
+      ball.transform.vx = -ball.transform.vx;
+      if (ball.transform.x < brickTransform.x) {
+        ball.transform.x = brickTransform.x - ball.transform.width;
       } else {
-        ball.x = brick.x + brick.width;    // right of the brick
+        ball.transform.x = brickTransform.x + brickTransform.width;
       }
     } else {
-      // The ball hit the brick's top or bottom.
-      ball.vy = -ball.vy;
-      if (ball.y < brick.y) {
-        ball.y = brick.y - ball.height;    // above the brick
+      ball.transform.vy = -ball.transform.vy;
+      if (ball.transform.y < brickTransform.y) {
+        ball.transform.y = brickTransform.y - ball.transform.height;
       } else {
-        ball.y = brick.y + brick.height;   // below the brick
+        ball.transform.y = brickTransform.y + brickTransform.height;
       }
     }
 
-    break;  // bounce off one brick per update, then stop looking
+    const wasRemoved = handleBrickImpact(brick, i, brickTransform);
+
+    // stop after handling one brick collision this frame
+    if (wasRemoved) {
+      break;
+    }
   }
 }
